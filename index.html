@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiNeto — Calculadora de Haberes</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══ PANTALLA SELECTOR DE PERFIL ══ -->
+<div id="screen-perfiles" style="display:none">
+  <div class="ob-card">
+    <div class="ob-title">MiNeto</div>
+    <div class="ob-name">Calculadora de Haberes</div>
+    <div class="field-label" style="margin:16px 0 10px">Perfiles guardados</div>
+    <div id="perfiles-lista" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-ghost btn-full" onclick="mostrarOnboarding()" style="flex:1">+ Crear nuevo perfil</button>
+      <button class="btn btn-ghost" onclick="importarPerfiles()" title="Importar backup JSON" style="padding:0 14px">&#8657; Importar</button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-align:center;padding:4px 0;line-height:1.4">
+      Los perfiles se guardan en <strong>localStorage</strong> del navegador.<br>
+      Ruta: Configuracion del navegador &gt; Almacenamiento &gt; localhost:5173
+    </div>
+  </div>
+</div>
+
+<!-- ══ PANTALLA ONBOARDING ══ -->
+<div id="screen-onboarding" class="onboarding" style="display:none">
+  <div class="ob-card">
+    <div class="ob-title">MiNeto</div>
+    <div class="ob-name">Calculadora de Haberes</div>
+
+    <div class="field mb-16">
+      <div class="field-label">Nombre completo</div>
+      <input type="text" id="ob-nombre" placeholder="Ej. Juan Pérez García" autocomplete="off">
+    </div>
+
+    <!-- Jornada primero para mostrar/ocultar secciones condicionales -->
+    <div class="field mb-16">
+      <div class="field-label">Tipo de jornada</div>
+      <div class="jornada-opts">
+        <div class="jornada-opt selected" data-j="FORANEO" onclick="selJornada(this)">Foráneo</div>
+        <div class="jornada-opt" data-j="LOCAL" onclick="selJornada(this)">Local</div>
+      </div>
+    </div>
+
+    <!-- Solo LOCAL: selector de días sueltos -->
+    <div class="field mb-16" id="ob-semana-wrap" style="display:none">
+      <div class="field-label">Días laborables</div>
+      <div class="dia-semana-picker" id="ob-dias-picker">
+        <div class="dsp-cell selected" data-dia="L" onclick="toggleDia(this)" title="Lunes">L</div>
+        <div class="dsp-cell selected" data-dia="M" onclick="toggleDia(this)" title="Martes">M</div>
+        <div class="dsp-cell selected" data-dia="X" onclick="toggleDia(this)" title="Miércoles">X</div>
+        <div class="dsp-cell selected" data-dia="J" onclick="toggleDia(this)" title="Jueves">J</div>
+        <div class="dsp-cell selected" data-dia="V" onclick="toggleDia(this)" title="Viernes">V</div>
+        <div class="dsp-cell selected" data-dia="S" onclick="toggleDia(this)" title="Sábado">S</div>
+        <div class="dsp-cell"         data-dia="D" onclick="toggleDia(this)" title="Domingo">D</div>
+      </div>
+    </div>
+
+    <div class="field mb-16">
+      <div class="field-label">Sistema pensionario</div>
+      <div class="seg-options">
+        <div class="seg-opt selected" data-seg="AFP" onclick="selSeg(this)">AFP</div>
+        <div class="seg-opt" data-seg="ONP" onclick="selSeg(this)">ONP</div>
+      </div>
+    </div>
+
+    <div id="ob-afp-wrap" class="field mb-24">
+      <div class="field-label">AFP</div>
+      <div class="seg-options" id="ob-afp-opts">
+        <div class="seg-opt selected" data-afp="Integra"   onclick="selAFP(this)">Integra</div>
+        <div class="seg-opt" data-afp="Prima"     onclick="selAFP(this)">Prima</div>
+        <div class="seg-opt" data-afp="Profuturo" onclick="selAFP(this)">Profuturo</div>
+        <div class="seg-opt" data-afp="Habitat"   onclick="selAFP(this)">Habitat</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-full" onclick="iniciarApp()">Continuar →</button>
+
+  </div>
+</div>
+
+<!-- ══ PANTALLA APP PRINCIPAL ══ -->
+<div id="screen-app" class="app-layout" style="display:none">
+
+  <!-- ══ SIDEBAR GLOBAL ══ -->
+  <aside id="app-sidebar" class="app-sidebar">
+    <div class="app-sb-brand">
+      <div class="app-sb-logo">MiNeto</div>
+      <div class="app-sb-version">v1.0</div>
+    </div>
+
+    <div class="app-sb-profile-row" id="app-sb-profile-row">
+      <div class="app-sb-avatar">👤</div>
+      <div class="app-sb-profile-info">
+        <div class="app-sb-pname" id="app-sb-pname">—</div>
+        <button class="app-sb-edit-btn" onclick="editarPerfil()">✎ Editar</button>
+      </div>
+    </div>
+
+    <nav class="app-sb-nav">
+      <div class="app-sb-section-lbl">MÓDULOS</div>
+      <button class="app-sb-item app-sb-active" id="sb-btn-individual" onclick="showModule('individual')" title="Individual">
+        <span class="app-sb-ico">📋</span><span>Individual</span>
+      </button>
+      <button class="app-sb-item" id="sb-btn-flujo" onclick="showModule('flujo')" title="Flujo de efectivo">
+        <span class="app-sb-ico">💰</span><span>Flujo de efectivo</span>
+      </button>
+
+      <!-- Sub-nav de Flujo (visible solo cuando flujo está activo) -->
+      <div class="app-sb-subnav" id="app-sb-flujo-nav" style="display:none">
+        <button class="app-sb-sub app-sb-sub-active" data-sec="inicio"      onclick="setFeSection('inicio')">🏠 Inicio</button>
+        <button class="app-sb-sub"                   data-sec="cuentas"     onclick="setFeSection('cuentas')">💳 Cuentas</button>
+        <button class="app-sb-sub"                   data-sec="graficos"    onclick="setFeSection('graficos')">📊 Gráficos</button>
+        <button class="app-sb-sub"                   data-sec="categorias"  onclick="setFeSection('categorias')">🏷️ Categorías</button>
+        <button class="app-sb-sub app-sb-wip" disabled>🔄 Pagos habituales</button>
+        <button class="app-sb-sub app-sb-wip" disabled>🔔 Recordatorios</button>
+        <button class="app-sb-sub"                   data-sec="ajustes"     onclick="setFeSection('ajustes')">⚙️ Ajustes</button>
+        <button class="app-sb-sub" onclick="compartirApp()">📤 Compartir</button>
+        <button class="app-sb-sub" onclick="valorarApp()">⭐ Valore la app</button>
+        <button class="app-sb-sub" onclick="abrirSoporte()">🎧 Soporte técnico</button>
+      </div>
+
+      <!-- Sub-nav de Individual (visible solo cuando individual está activo) -->
+      <div class="app-sb-subnav" id="app-sb-ind-nav">
+        <button class="app-sb-sub" onclick="irInicio()">⌂ Cambiar perfil</button>
+      </div>
+
+      <div style="flex:1"></div>
+      <div class="app-sb-section-lbl">SISTEMA</div>
+      <button class="app-sb-item" id="sb-btn-params" onclick="showModule('params')" title="Parámetros">
+        <span class="app-sb-ico">⚙️</span><span>Parámetros</span>
+      </button>
+    </nav>
+
+    <div class="app-sb-footer">
+      <button class="app-sb-theme-btn" onclick="toggleTheme()" id="btn-theme">☾ Dark</button>
+      <button class="app-sb-theme-btn app-sb-voz-btn" onclick="toggleVoz()" id="btn-voz-toggle">🎤 Voz OFF</button>
+    </div>
+  </aside>
+
+  <!-- ══ CONTENIDO DE LOS MÓDULOS ══ -->
+  <div id="app-content" class="app-content">
+
+    <!-- ══ MÓDULO: INDIVIDUAL ══ -->
+    <div id="module-individual" class="module-panel active-module">
+
+      <div class="grid-2 mb-24">
+        <div class="card">
+          <div class="sec">Configuración del mes</div>
+
+          <div class="field">
+            <div class="field-label">Año · Mes</div>
+            <div class="flex-center gap-8">
+              <input type="number" id="ind-anio" value="2026" min="2024" max="2030" style="width:90px">
+              <select id="ind-mes" onchange="recalcular()">
+                <option value="0">Enero</option><option value="1">Febrero</option>
+                <option value="2">Marzo</option><option value="3">Abril</option>
+                <option value="4">Mayo</option><option value="5">Junio</option>
+                <option value="6">Julio</option><option value="7">Agosto</option>
+                <option value="8">Septiembre</option><option value="9">Octubre</option>
+                <option value="10">Noviembre</option><option value="11">Diciembre</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label">Sueldo base <span class="badge badge-edit">S/</span></div>
+            <input type="number" id="ind-sueldo" placeholder="0.00" oninput="recalcular()">
+          </div>
+
+          <div class="field">
+            <div class="field-label">Asignación familiar</div>
+            <div class="flex-center gap-8 mb-8" style="margin-top:4px">
+              <label class="chk-row">
+                <input type="checkbox" id="chk-hijos" onchange="toggleHijosApp()">
+                <span>Hijos a cargo</span>
+              </label>
+            </div>
+            <input type="number" id="ind-af" placeholder="0.00" oninput="recalcular()">
+          </div>
+
+          <div class="field">
+            <div class="field-label">Movilidad mensual <span class="badge badge-edit">S/</span></div>
+            <input type="number" id="ind-movil" placeholder="0.00" oninput="recalcular()" min="0" step="1">
+          </div>
+
+          <div class="field">
+            <div class="field-label">Seguro salud</div>
+            <div class="flex-center gap-8" style="margin-top:4px">
+              <label class="chk-row">
+                <input type="checkbox" id="chk-eps" onchange="toggleEpsApp()">
+                <span>Tengo EPS</span>
+              </label>
+            </div>
+            <div class="eps-detail" id="ind-eps-detail">
+              <div class="field-label" style="margin-top:8px">Copago mensual</div>
+              <input type="number" id="ind-eps-monto" placeholder="0.00" oninput="recalcular()">
+            </div>
+          </div>
+
+        </div>
+
+        <div class="card">
+          <div class="sec">Calendario</div>
+
+          <div class="cal-top">
+            <div class="cal-nav">
+              <button class="btn-nav" onclick="calPrev()">‹</button>
+              <div class="cal-month" id="cal-label">—</div>
+              <button class="btn-nav" onclick="calNext()">›</button>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="calClear()">Limpiar</button>
+          </div>
+
+          <div class="paint-row" id="paint-row">
+            <button class="paint-btn sel-W" data-mark="W"   onclick="selMark(this)">W Trabajo</button>
+            <button class="paint-btn" data-mark="R"          onclick="selMark(this)">R Descanso</button>
+            <button class="paint-btn" data-mark="V"          onclick="selMark(this)">V Vacaciones</button>
+            <button class="paint-btn" data-mark="F"          onclick="selMark(this)">F Falta</button>
+            <button class="paint-btn" data-mark="SU"         onclick="selMark(this)">SU Suspensión</button>
+            <button class="paint-btn" data-mark="MED"        onclick="selMark(this)">MED Médico</button>
+            <button class="paint-btn" data-mark="TL"         onclick="selMark(this)">TL Teletrabajo</button>
+          </div>
+
+          <div class="cal-grid" id="cal-grid"></div>
+
+          <div class="cal-counters" id="cal-counters">
+            <div class="counter W"><div class="cnt-n" id="cnt-W">0</div><div class="cnt-l">Trabajo</div></div>
+            <div class="counter R"><div class="cnt-n" id="cnt-R">0</div><div class="cnt-l">Descanso</div></div>
+            <div class="counter V"><div class="cnt-n" id="cnt-V">0</div><div class="cnt-l">Vacaciones</div></div>
+            <div class="counter F"><div class="cnt-n" id="cnt-F">0</div><div class="cnt-l">Faltas</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">Resultado del mes</div>
+
+      <div id="res-hero-wrap">
+        <div class="result-hero">
+          <div>
+            <div class="rh-label">Neto a cobrar</div>
+            <div class="rh-value" id="res-neto">S/ 0.00</div>
+            <div class="rh-sub" id="res-periodo">—</div>
+          </div>
+          <div class="rh-pills">
+            <div class="rh-pill"><span>Días con sueldo</span><strong id="res-dias-s">0</strong></div>
+            <div class="rh-pill"><span>Días con viáticos</span><strong id="res-dias-v">0</strong></div>
+            <div class="rh-pill"><span>Valor día</span><strong id="res-vdia">S/ 0.00</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-4 mt-16 mb-16">
+        <div class="bc">
+          <div class="bc-head blue">Ingresos</div>
+          <div class="line"><span class="ll">Sueldo proporcional</span><span class="lv blue" id="r-sueldo-prop">0.00</span></div>
+          <div class="line"><span class="ll">Asig. familiar</span><span class="lv blue" id="r-af-prop">0.00</span></div>
+          <div class="line"><span class="ll">Alimentación</span><span class="lv blue" id="r-alim">0.00</span></div>
+          <div class="line"><span class="ll">Alojamiento</span><span class="lv blue" id="r-aloj">0.00</span></div>
+          <div class="line"><span class="ll">Movilidad</span><span class="lv blue" id="r-movil">0.00</span></div>
+          <div class="line"><span class="ll">Feriados trabajados ★</span><span class="lv blue" id="r-feriado">0.00</span></div>
+          <div class="line-total"><span class="ll">Total</span><span class="lv blue" id="r-tot-ing">0.00</span></div>
+        </div>
+        <div class="bc">
+          <div class="bc-head red">Descuentos</div>
+          <div class="line"><span class="ll">AFP Fondo</span><span class="lv red" id="r-afp-fondo">0.00</span></div>
+          <div class="line"><span class="ll">AFP Seguro</span><span class="lv red" id="r-afp-seguro">0.00</span></div>
+          <div class="line"><span class="ll">ONP</span><span class="lv red" id="r-onp">0.00</span></div>
+          <div class="line"><span class="ll">Renta 5ta</span><span class="lv red" id="r-r5">0.00</span></div>
+          <div class="line"><span class="ll">EPS copago</span><span class="lv red" id="r-eps">0.00</span></div>
+          <div class="line-total"><span class="ll">Total</span><span class="lv red" id="r-tot-desc">0.00</span></div>
+        </div>
+        <div class="bc">
+          <div class="bc-head amber">Empleador</div>
+          <div class="line"><span class="ll">EsSalud</span><span class="lv amber" id="r-essalud">0.00</span></div>
+          <div class="line"><span class="ll">Vida Ley</span><span class="lv amber" id="r-vidaley">0.00</span></div>
+          <div class="line-total"><span class="ll">Total</span><span class="lv amber" id="r-tot-emp">0.00</span></div>
+        </div>
+        <div class="bc">
+          <div class="bc-head purple">Beneficios Sociales</div>
+          <div class="line"><span class="ll">CTS mens.</span><span class="lv purple" id="r-cts">0.00</span></div>
+          <div class="line"><span class="ll">Gratificación</span><span class="lv purple" id="r-grati">0.00</span></div>
+          <div class="line-total"><span class="ll">Total</span><span class="lv purple" id="r-tot-prov">0.00</span></div>
+        </div>
+      </div>
+
+      <div class="renta-detail mt-16">
+        <button class="renta-toggle" id="renta-toggle-btn" onclick="toggleRenta()">
+          <span>Detalle Renta 5ta Categoría</span>
+          <span class="renta-arrow">▾</span>
+        </button>
+        <div class="renta-body" id="renta-body">
+          <div class="renta-steps" id="renta-steps"></div>
+        </div>
+      </div>
+
+      <div class="flex-between mt-24 no-print">
+        <button class="btn btn-ghost btn-sm" onclick="imprimirBoleta()">📄 Descargar boleta PDF</button>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">💾 guardado automático</span>
+      </div>
+
+    </div><!-- /module-individual -->
+
+
+    <!-- ══ MÓDULO: FLUJO DE EFECTIVO ══ -->
+    <div id="module-flujo" class="module-panel" style="display:none">
+
+      <!-- Sub-nav horizontal solo visible en móvil -->
+      <nav class="fe-mobile-subnav" id="fe-mobile-subnav">
+        <button class="fe-msn-btn fe-msn-active" data-sec="inicio"     onclick="setFeSection('inicio')">🏠<span>Inicio</span></button>
+        <button class="fe-msn-btn"               data-sec="cuentas"    onclick="setFeSection('cuentas')">💳<span>Cuentas</span></button>
+        <button class="fe-msn-btn"               data-sec="graficos"   onclick="setFeSection('graficos')">📊<span>Gráficos</span></button>
+        <button class="fe-msn-btn"               data-sec="categorias" onclick="setFeSection('categorias')">🏷️<span>Cats</span></button>
+        <button class="fe-msn-btn"               data-sec="ajustes"    onclick="setFeSection('ajustes')">⚙️<span>Ajustes</span></button>
+      </nav>
+
+      <div class="fe-content">
+
+        <!-- ── SECCIÓN: INICIO ── -->
+        <div class="fe-section" id="fe-section-inicio">
+
+          <div class="fe-topbar">
+            <div class="fe-balance-wrap">
+              <div class="fe-val" id="fe-bal-val">S/ 0.00</div>
+              <div class="fe-lbl" id="fe-bal-lbl">Total gastos</div>
+            </div>
+            <div class="fe-tipo-toggle">
+              <button class="fe-tipo-btn fe-active" onclick="setFeTipo('gastos')">Gastos</button>
+              <button class="fe-tipo-btn"           onclick="setFeTipo('ingresos')">Ingresos</button>
+            </div>
+          </div>
+
+          <div class="fe-periodo-bar">
+            <button class="fe-per-btn fe-active" id="fe-per-dia"    onclick="setFePeriodo('dia')">Día</button>
+            <button class="fe-per-btn"           id="fe-per-semana" onclick="setFePeriodo('semana')">Semana</button>
+            <button class="fe-per-btn"           id="fe-per-mes"    onclick="setFePeriodo('mes')">Mes</button>
+            <button class="fe-per-btn"           id="fe-per-anio"   onclick="setFePeriodo('anio')">Año</button>
+            <button class="fe-per-btn"           id="fe-per-custom" onclick="setFePeriodo('custom')">Período</button>
+            <button class="fe-per-nav" onclick="navFePeriodo(-1)">‹</button>
+            <button class="fe-per-label-btn" id="fe-per-label" onclick="abrirDatePicker()">—</button>
+            <button class="fe-per-nav" onclick="navFePeriodo(1)">›</button>
+            <button class="fe-per-nav fe-per-today" onclick="feState.offset=0;renderFlujoTab()" title="Volver a hoy">⌂</button>
+          </div>
+
+          <!-- Selector de rango personalizado (hidden by default) -->
+          <div class="fe-custom-range" id="fe-custom-range" style="display:none">
+            <input type="date" id="fe-range-from" onchange="setCustomRange()">
+            <span>→</span>
+            <input type="date" id="fe-range-to" onchange="setCustomRange()">
+          </div>
+
+          <!-- Date picker popup for Día mode -->
+          <input type="date" id="fe-dia-picker" class="fe-dia-picker-hidden" onchange="setFeDia(this.value)">
+
+          <div class="fe-donut-section">
+            <div class="fe-donut-wrap">
+              <svg class="fe-donut-svg" id="fe-donut-svg" viewBox="0 0 200 200"></svg>
+              <div class="fe-donut-center">
+                <div class="fe-donut-currency">S/</div>
+                <div class="fe-donut-total" id="fe-donut-total">0.00</div>
+                <div class="fe-donut-lbl"   id="fe-donut-lbl">Total</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lista acordeón: categorías + detalle inline al expandir -->
+          <div class="fe-cat-list" id="fe-cat-list"></div>
+
+          <div class="fe-actions-bar">
+            <button class="btn btn-ghost btn-sm" onclick="exportarFlujoCSV()">⬇ CSV</button>
+          </div>
+        </div>
+
+        <!-- ── SECCIÓN: CUENTAS ── -->
+        <div class="fe-section" id="fe-section-cuentas" style="display:none">
+          <div class="fe-section-title">Cuentas</div>
+          <div class="fe-cuenta-card">
+            <div class="fe-cuenta-ico">💰</div>
+            <div class="fe-cuenta-info">
+              <div class="fe-cuenta-nombre">Cuenta general</div>
+              <div class="fe-cuenta-tipo">Soles (PEN) — cuenta principal</div>
+              <div class="fe-cuenta-saldo" id="fe-cuenta-saldo">S/ 0.00</div>
+            </div>
+          </div>
+          <div style="padding:20px 0;color:var(--muted);font-size:12px">
+            Soporte para múltiples cuentas — próximamente.
+          </div>
+        </div>
+
+        <!-- ── SECCIÓN: GRÁFICOS ── -->
+        <div class="fe-section" id="fe-section-graficos" style="display:none">
+          <div class="fe-section-title">Gráficos</div>
+          <div class="fe-4charts" id="fe-4charts">
+
+            <div class="fe-chart-blk">
+              <div class="fe-chart-blk-hdr">
+                <span class="fe-chart-blk-title">📅 Día · últimos 14 días</span>
+                <div class="fe-chart-blk-leg" id="fe-chart-leg-dia"></div>
+              </div>
+              <svg class="fe-chart-svg" id="fe-chart-dia"></svg>
+            </div>
+
+            <div class="fe-chart-blk">
+              <div class="fe-chart-blk-hdr">
+                <span class="fe-chart-blk-title">📆 Semana · últimas 8 semanas</span>
+                <div class="fe-chart-blk-leg" id="fe-chart-leg-semana"></div>
+              </div>
+              <svg class="fe-chart-svg" id="fe-chart-semana"></svg>
+            </div>
+
+            <div class="fe-chart-blk">
+              <div class="fe-chart-blk-hdr">
+                <span class="fe-chart-blk-title">🗓️ Mes · últimos 12 meses</span>
+                <div class="fe-chart-blk-leg" id="fe-chart-leg-mes"></div>
+              </div>
+              <svg class="fe-chart-svg" id="fe-chart-mes"></svg>
+            </div>
+
+            <div class="fe-chart-blk">
+              <div class="fe-chart-blk-hdr">
+                <span class="fe-chart-blk-title">🗃️ Año · 2022–2026</span>
+                <div class="fe-chart-blk-leg" id="fe-chart-leg-anio"></div>
+              </div>
+              <svg class="fe-chart-svg" id="fe-chart-anio"></svg>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── SECCIÓN: CATEGORÍAS ── -->
+        <div class="fe-section" id="fe-section-categorias" style="display:none">
+          <div class="fe-section-title">Categorías</div>
+          <div class="fe-tipo-toggle" style="margin-bottom:16px;max-width:220px">
+            <button class="fe-tipo-btn fe-active" id="fe-sbc-gasto"   onclick="setSbCatTipo('gasto')">Gastos</button>
+            <button class="fe-tipo-btn"           id="fe-sbc-ingreso" onclick="setSbCatTipo('ingreso')">Ingresos</button>
+          </div>
+          <div class="fe-sb-cats-grid" id="fe-sb-cats-grid"></div>
+          <div style="margin-top:16px">
+            <button class="btn btn-ghost btn-sm" onclick="openEditCat(null)">＋ Nueva categoría</button>
+          </div>
+        </div>
+
+        <!-- ── SECCIÓN: AJUSTES ── -->
+        <div class="fe-section" id="fe-section-ajustes" style="display:none">
+          <div class="fe-section-title">Ajustes</div>
+
+          <div class="fe-ajuste-group">
+            <div class="fe-ajuste-group-title">Apariencia</div>
+            <div class="fe-ajuste-row">
+              <span>Tema oscuro / claro</span>
+              <button class="btn btn-ghost btn-sm" onclick="toggleTheme()">☾ / ☀ Cambiar</button>
+            </div>
+          </div>
+
+          <div class="fe-ajuste-group">
+            <div class="fe-ajuste-group-title">Datos y almacenamiento</div>
+            <div class="fe-ajuste-row">
+              <span>Exportar backup JSON</span>
+              <button class="btn btn-ghost btn-sm" onclick="exportarPerfiles()">⬇ Exportar</button>
+            </div>
+            <div class="fe-ajuste-row">
+              <span>Importar backup JSON</span>
+              <button class="btn btn-ghost btn-sm" onclick="importarPerfiles()">⬆ Importar</button>
+            </div>
+            <div class="fe-ajuste-row">
+              <span>Exportar flujo como CSV</span>
+              <button class="btn btn-ghost btn-sm" onclick="exportarFlujoCSV()">⬇ CSV</button>
+            </div>
+          </div>
+
+          <div class="fe-ajuste-group">
+            <div class="fe-ajuste-group-title">Acerca de MiNeto</div>
+            <div class="fe-ajuste-row"><span>Versión</span><span class="fe-ajuste-val">1.0.0</span></div>
+            <div class="fe-ajuste-row"><span>Año</span><span class="fe-ajuste-val">2026</span></div>
+            <div class="fe-ajuste-row"><span>Desarrollado por</span><span class="fe-ajuste-val">Diego Ulises</span></div>
+          </div>
+
+          <div class="fe-ajuste-group">
+            <div class="fe-ajuste-group-title">Soporte</div>
+            <div class="fe-ajuste-row">
+              <span>Contactar soporte</span>
+              <button class="btn btn-ghost btn-sm" onclick="abrirSoporte()">📧 Contactar</button>
+            </div>
+          </div>
+
+          <div class="fe-ajuste-group">
+            <div class="fe-ajuste-group-title">Datos de prueba</div>
+            <div class="fe-ajuste-row">
+              <span>Cargar muestra 2025–Mar 2026</span>
+              <button class="btn btn-ghost btn-sm" onclick="generarDatosPrueba()">▶ Cargar</button>
+            </div>
+            <div class="fe-ajuste-row">
+              <span>Eliminar datos de prueba</span>
+              <button class="btn btn-ghost btn-sm" onclick="limpiarDatosPrueba()">✕ Limpiar</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FAB: nueva transacción (visible solo en sección Inicio) -->
+      <button class="fe-fab" id="fe-fab" onclick="openAddTx()" title="Nueva transacción">＋</button>
+
+    </div><!-- /module-flujo -->
+
+
+    <!-- ══ MÓDULO: PARÁMETROS ══ -->
+    <div id="module-params" class="module-panel" style="display:none">
+      <div class="params-content">
+        <h2 class="params-title">Parámetros del Sistema</h2>
+
+        <!-- EMPRESA -->
+        <div class="params-group">
+          <div class="params-group-title">🏢 Empresa</div>
+          <div class="params-row">
+            <label class="params-label">Nombre de la empresa</label>
+            <input type="text" id="p-empresa-nombre" class="fe-text-inp" placeholder="Ej. Consorcio Rovella-INMAC">
+          </div>
+          <div class="params-row">
+            <label class="params-label">RUC</label>
+            <input type="text" id="p-empresa-ruc" class="fe-text-inp" placeholder="20XXXXXXXXX">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Dirección</label>
+            <input type="text" id="p-empresa-dir" class="fe-text-inp" placeholder="Av. Ejemplo 123, Lima">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Logo (URL o base64)</label>
+            <input type="text" id="p-empresa-logo" class="fe-text-inp" placeholder="https://... o data:image/...">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Año vigente</label>
+            <input type="number" id="p-anio" class="fe-text-inp" min="2020" max="2030" value="2026">
+          </div>
+        </div>
+
+        <!-- PLANILLA -->
+        <div class="params-group">
+          <div class="params-group-title">📋 Planilla</div>
+          <div class="params-row">
+            <label class="params-label">Asignación Familiar (S/)</label>
+            <input type="number" id="p-af" class="fe-text-inp" min="0" step="0.01" placeholder="102.50">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Movilidad mensual fija (S/)</label>
+            <input type="number" id="p-movilidad" class="fe-text-inp" min="0" step="0.01" placeholder="679.00">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Viático alimentación (S/ por día)</label>
+            <input type="number" id="p-viat-alim" class="fe-text-inp" min="0" step="0.01" placeholder="39.00">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Viático alojamiento (S/ por día)</label>
+            <input type="number" id="p-viat-aloj" class="fe-text-inp" min="0" step="0.01" placeholder="65.00">
+          </div>
+        </div>
+
+        <!-- APARIENCIA Y REGIONAL -->
+        <div class="params-group">
+          <div class="params-group-title">🎨 Apariencia y Regional</div>
+          <div class="params-row">
+            <label class="params-label">Moneda</label>
+            <select id="p-moneda" class="fe-text-inp">
+              <option value="PEN">Sol peruano (S/)</option>
+              <option value="USD">Dólar estadounidense ($)</option>
+            </select>
+          </div>
+          <div class="params-row" id="p-tipo-cambio-row" style="display:none">
+            <label class="params-label">Tipo de cambio (USD → PEN)</label>
+            <input type="number" id="p-tipo-cambio" class="fe-text-inp" min="0" step="0.001" placeholder="3.850">
+          </div>
+          <div class="params-row">
+            <label class="params-label">Separador decimal</label>
+            <select id="p-sep-decimal" class="fe-text-inp">
+              <option value=".">Punto ( 1,234.56 )</option>
+              <option value=",">Coma ( 1.234,56 )</option>
+            </select>
+          </div>
+          <div class="params-row">
+            <label class="params-label">Primer día de la semana</label>
+            <select id="p-primer-dia" class="fe-text-inp">
+              <option value="1">Lunes</option>
+              <option value="0">Domingo</option>
+            </select>
+          </div>
+          <div class="params-row">
+            <label class="params-label">Redondear cantidades</label>
+            <label class="params-switch">
+              <input type="checkbox" id="p-redondeo">
+              <span class="params-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- IA -->
+        <div class="params-group">
+          <div class="params-group-title">🤖 Inteligencia Artificial (Gemini)</div>
+          <div class="params-row">
+            <label class="params-label">Clave API Gemini</label>
+            <input type="password" id="p-gemini-key" class="fe-text-inp" placeholder="AIzaSy…" autocomplete="off">
+          </div>
+          <div class="params-row">
+            <label class="params-label" style="font-size:10px;line-height:1.4;color:var(--muted)">
+              Gratis en <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a> · 15 consultas/min · Habilita comandos de voz inteligentes
+            </label>
+          </div>
+        </div>
+
+        <div class="params-actions">
+          <button class="btn btn-primary" onclick="saveParams()">💾 Guardar parámetros</button>
+        </div>
+      </div>
+    </div><!-- /module-params -->
+
+  </div><!-- /app-content -->
+
+  <!-- ═══ MODAL: AGREGAR / EDITAR TRANSACCIÓN ═══ -->
+  <div class="fe-overlay" id="fe-overlay-tx" onclick="feOverlayClick(event,'tx')" style="display:none">
+    <div class="fe-modal">
+      <div class="fe-modal-head">
+        <span class="fe-modal-title" id="fe-tx-modal-title">Nueva transacción</span>
+        <button class="fe-modal-close" onclick="closeAddTx()">✕</button>
+      </div>
+      <div class="fe-tipo-toggle" style="margin-bottom:16px">
+        <button class="fe-tipo-btn fe-active" id="fe-tx-tipo-gasto"   onclick="setModalTipo('gasto')">Gasto</button>
+        <button class="fe-tipo-btn"           id="fe-tx-tipo-ingreso" onclick="setModalTipo('ingreso')">Ingreso</button>
+      </div>
+      <!-- Botón disponible solo en tipo Ingreso y al crear (no editar) -->
+      <div id="fe-boleta-bar" style="display:none;margin-bottom:12px">
+        <button class="btn btn-ghost btn-sm" style="width:100%;font-size:11px" onclick="generarDesdeBoleta()">
+          📄 Generar desde Boleta · Mes actual
+        </button>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <div class="field-label">Monto (S/)</div>
+        <input type="number" id="fe-tx-monto" placeholder="0.00" min="0" step="0.01" class="fe-text-inp">
+      </div>
+      <div class="field-label" style="margin-bottom:8px">Categoría</div>
+      <div class="fe-cats-grid" id="fe-cats-grid"></div>
+      <div class="field" style="margin:12px 0">
+        <div class="field-label">Descripción (opcional)</div>
+        <input type="text" id="fe-tx-desc" placeholder="Ej. Almuerzo, taxi…" autocomplete="off" class="fe-text-inp">
+      </div>
+      <div class="fe-fecha-row">
+        <div class="field-label" style="margin-bottom:6px">Fecha</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="fe-fecha-btn fe-active" id="fe-fecha-hoy"    onclick="setTxFecha('hoy')">Hoy</button>
+          <button class="fe-fecha-btn"           id="fe-fecha-ayer"   onclick="setTxFecha('ayer')">Ayer</button>
+          <button class="fe-fecha-btn"           id="fe-fecha-custom" onclick="setTxFecha('custom')">Otra fecha</button>
+          <input type="date" id="fe-fecha-inp" class="fe-date-inp" oninput="txFechaManual()" style="display:none">
+        </div>
+      </div>
+      <div class="fe-modal-actions">
+        <button class="btn btn-ghost" onclick="closeAddTx()">Cancelar</button>
+        <button class="btn btn-danger btn-sm" id="fe-btn-del-tx" onclick="deleteTx()" style="display:none">Eliminar</button>
+        <button class="btn btn-primary" onclick="saveTx()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: GESTIONAR CATEGORÍAS ═══ -->
+  <div class="fe-overlay" id="fe-overlay-cats" onclick="feOverlayClick(event,'cats')" style="display:none">
+    <div class="fe-modal fe-modal-wide">
+      <div class="fe-modal-head">
+        <span class="fe-modal-title">Categorías</span>
+        <button class="fe-modal-close" onclick="closeCatModal()">✕</button>
+      </div>
+      <div class="fe-tipo-toggle" style="margin-bottom:16px">
+        <button class="fe-tipo-btn fe-active" id="fe-cm-gasto"   onclick="setCatModalTipo('gasto')">Gastos</button>
+        <button class="fe-tipo-btn"           id="fe-cm-ingreso" onclick="setCatModalTipo('ingreso')">Ingresos</button>
+      </div>
+      <div class="cats-list" id="cats-list"></div>
+      <div class="fe-modal-actions" style="margin-top:12px">
+        <button class="btn btn-ghost btn-sm" onclick="openEditCat(null)">+ Nueva categoría</button>
+        <button class="btn btn-primary btn-sm" onclick="closeCatModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODAL: EDITAR / CREAR CATEGORÍA ═══ -->
+  <div class="fe-overlay" id="fe-overlay-editcat" onclick="feOverlayClick(event,'editcat')" style="display:none">
+    <div class="fe-modal">
+      <div class="fe-modal-head">
+        <span class="fe-modal-title" id="fe-editcat-title">Nueva categoría</span>
+        <button class="fe-modal-close" onclick="closeEditCat()">✕</button>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <div class="field-label">Nombre</div>
+        <input type="text" id="fe-ec-nombre" placeholder="Nombre de la categoría" class="fe-text-inp">
+      </div>
+      <div class="field-label" style="margin-bottom:6px">Emoji</div>
+      <div class="cat-emoji-grid" id="cat-emoji-grid"></div>
+      <div class="field-label" style="margin:12px 0 6px">Color</div>
+      <div class="cat-color-grid" id="cat-color-grid"></div>
+      <div class="field" style="margin:12px 0">
+        <div class="field-label">Presupuesto máx. mensual (opcional)</div>
+        <input type="number" id="fe-ec-budget" placeholder="Sin límite" min="0" step="1" class="fe-text-inp">
+      </div>
+      <input type="hidden" id="fe-ec-tipo">
+      <input type="hidden" id="fe-ec-id">
+      <div class="fe-modal-actions">
+        <button class="btn btn-ghost" onclick="closeEditCat()">Cancelar</button>
+        <button class="btn btn-danger btn-sm" id="fe-btn-del-cat" onclick="deleteCat()" style="display:none">Eliminar</button>
+        <button class="btn btn-primary" onclick="saveCatEdit()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="voz-bot-bubble" id="voz-bot-bubble">
+    <button class="voz-bot-bubble-close" onclick="document.getElementById('voz-bot-bubble').classList.remove('show')">✕</button>
+    <div class="voz-bot-bubble-ico">🤖</div>
+    <div class="voz-bot-bubble-txt" id="voz-bot-bubble-txt"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <!-- ── MOBILE TOP BAR (inside screen-app, position:fixed) ── -->
+  <div id="mobile-topbar" class="mobile-topbar">
+    <div class="mtp-brand">MiNeto</div>
+    <div class="mtp-profile" id="mtp-profile">—</div>
+    <button class="mtp-voz-btn" id="mtp-voz-btn" onclick="toggleVoz()" title="Voz">🎤</button>
+    <button class="mtp-theme-btn" onclick="toggleTheme()" title="Tema">☾</button>
+  </div>
+
+  <!-- ── BOTTOM NAV (inside screen-app, position:fixed) ── -->
+  <nav id="bottom-nav" class="bottom-nav">
+    <button class="bn-btn bn-active" id="bn-individual" onclick="showModule('individual')">
+      <span class="bn-ico">📋</span>
+      <span class="bn-lbl">Calc</span>
+    </button>
+    <button class="bn-btn" id="bn-flujo" onclick="showModule('flujo')">
+      <span class="bn-ico">💰</span>
+      <span class="bn-lbl">Flujo</span>
+    </button>
+    <button class="bn-btn" id="bn-params" onclick="showModule('params')">
+      <span class="bn-ico">⚙️</span>
+      <span class="bn-lbl">Config</span>
+    </button>
+    <button class="bn-btn" onclick="irInicio()">
+      <span class="bn-ico">👤</span>
+      <span class="bn-lbl">Perfil</span>
+    </button>
+  </nav>
+
+
+  <!-- ═══ MODAL: SELECTOR DE PERÍODO PERSONALIZADO ═══ -->
+  <div class="fe-overlay" id="fe-overlay-period" onclick="feOverlayClick(event,'period')" style="display:none">
+    <div class="fe-modal">
+      <div class="fe-modal-head">
+        <span class="fe-modal-title">📅 Seleccionar período</span>
+        <button class="fe-modal-close" onclick="closePeriodPicker()">✕</button>
+      </div>
+      <label class="chk-row" style="margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="period-todo" onchange="togglePeriodTodo(this)">
+        <span style="font-size:13px;font-weight:600">Todo el historial</span>
+      </label>
+      <div class="field" style="margin-bottom:10px">
+        <div class="field-label">Desde</div>
+        <input type="date" id="period-from" class="fe-date-inp" style="width:100%;box-sizing:border-box">
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <div class="field-label">Hasta</div>
+        <input type="date" id="period-to" class="fe-date-inp" style="width:100%;box-sizing:border-box">
+      </div>
+      <div class="fe-modal-actions">
+        <button class="btn btn-ghost" onclick="closePeriodPicker()">Cancelar</button>
+        <button class="btn btn-primary" onclick="applyPeriodPicker()">Aplicar</button>
+      </div>
+    </div>
+  </div>
+</div><!-- /screen-app -->
+
+<!-- CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="js/motor_calculo.js?v=29w"></script>
+<script src="js/exportador.js?v=29w"></script>
+<script src="js/app.js?v=29w"></script>
+<script src="js/voz.js?v=29w"></script>
+
+<!-- ── FAB Micrófono flotante global (oculto hasta activar Voz ON) ── -->
+<div id="voz-fab-wrap" class="voz-fab-wrap" style="display:none">
+  <div class="voz-fab-hint" id="voz-fab-hint">Mantén presionado para hablar</div>
+  <button id="voz-btn"
+    class="voz-fab"
+    title="Mantener presionado para hablar"
+  >🎤</button>
+</div>
+
+</body>
+</html>
